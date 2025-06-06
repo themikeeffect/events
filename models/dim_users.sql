@@ -2,7 +2,7 @@ WITH first_event AS (
   SELECT
     user_id,
     MIN(event_time) AS first_event_time
-  FROM {{ ref('Events.event_stream') }}
+ FROM {{ source('Events', 'event_stream') }}
   GROUP BY user_id
 ),
 user_details AS (
@@ -12,7 +12,7 @@ user_details AS (
     e.platform AS first_platform,
     e.utm_source AS first_utm_source,
     e.country AS first_country
-  FROM {{ ref('Events.event_stream') }} e
+  FROM {{ source('Events', 'event_stream') }} e
   JOIN first_event f
     ON e.user_id = f.user_id AND e.event_time = f.first_event_time
 )

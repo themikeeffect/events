@@ -1,0 +1,8 @@
+version: 1
+
+sources:
+  - name: Events
+    database: gothic-imprint-462017-f7     
+    schema: Events   
+    tables:
+      - name: event_stream

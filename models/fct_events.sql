@@ -4,4 +4,4 @@ SELECT
   event_type,
   transaction_category,
   miles_amount
-FROM {{ ref('Events.event_stream') }};
+FROM {{ source('Events', 'event_stream') }}
