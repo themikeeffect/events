@@ -1,6 +1,0 @@
-version: 1
-models:
-    - name: dim_users
-      description: "User Information table from dataset"
-    - name: fct_events
-      description: "Events"
