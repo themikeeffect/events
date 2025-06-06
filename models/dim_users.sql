@@ -1,20 +1,28 @@
-WITH first_event AS (
+WITH first_event_time AS (
   SELECT
     user_id,
     MIN(event_time) AS first_event_time
- FROM {{ source('Events', 'event_stream') }}
+  FROM {{ source('Events', 'event_stream') }}
   GROUP BY user_id
 ),
-user_details AS (
+
+first_event_details AS (
   SELECT
     e.user_id,
-    e.event_time AS first_event_time,
+    e.event_time,
     e.platform AS first_platform,
     e.utm_source AS first_utm_source,
     e.country AS first_country
   FROM {{ source('Events', 'event_stream') }} e
-  JOIN first_event f
-    ON e.user_id = f.user_id AND e.event_time = f.first_event_time
+  JOIN first_event_time fe
+    ON e.user_id = fe.user_id
+    AND e.event_time = fe.first_event_time
 )
 
-SELECT * FROM user_details;
+SELECT
+  user_id,
+  event_time AS first_event_time,
+  first_platform,
+  first_utm_source,
+  first_country
+FROM first_event_details
