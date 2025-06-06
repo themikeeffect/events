@@ -24,9 +24,9 @@ current_period AS (
     a.user_id,
     a.day,
     CASE
-      WHEN a.day = DATE_TRUNC(DATE(fs.first_seen), DAY) THEN 'new'
-      WHEN a.prev_day IS NOT NULL THEN 'retained'
-      ELSE 'resurrected'
+  WHEN a.day = DATE_TRUNC(DATE(fs.first_seen), DAY) THEN 'new'
+  WHEN a.prev_day = DATE_SUB(a.day, INTERVAL 1 DAY) THEN 'retained'
+  ELSE 'resurrected'
     END AS status
   FROM activity_lagged a
   LEFT JOIN (
@@ -38,13 +38,14 @@ current_period AS (
 
 churned_users AS (
   SELECT
-    user_id,
-    prev_day AS day,
+    prev.user_id,
+    prev.day,
     'churned' AS status
-  FROM activity_lagged
-  WHERE prev_day IS NOT NULL AND user_id NOT IN (
-    SELECT user_id FROM current_period
-  )
+  FROM user_activity prev
+  LEFT JOIN user_activity next
+    ON prev.user_id = next.user_id
+   AND next.day = DATE_ADD(prev.day, INTERVAL 1 DAY)
+  WHERE next.user_id IS NULL
 )
 
 SELECT
