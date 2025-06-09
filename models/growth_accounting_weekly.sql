@@ -8,7 +8,8 @@
     --- generating the user movement
 WITH gt_raw_movement as (
 SELECT 
-   gt_raw.cal_week,
+    gt_raw.cal_month,
+    gt_raw.cal_week,
     gt_raw.user_id,
     gt_raw.no_trns_wk,    
     CASE WHEN gt_raw.no_trns_wk > 0 then LAG(gt_raw.cal_week) OVER (PARTITION BY gt_raw.user_id ORDER BY cal_week) END trns_prev_week,
@@ -23,6 +24,7 @@ SELECT
     gt_raw.miles_redeemed
 FROM(
 SELECT 
+    DATE_TRUNC(DATE(gt.cal_day), MONTH) cal_month,
     DATE_TRUNC(DATE(gt.cal_day), Week(SUNDAY)) cal_week, 
     gt.user_id,
     SUM(
@@ -42,6 +44,7 @@ SELECT
 FROM {{ ref('growth_transactions') }} gt
 GROUP BY
     DATE_TRUNC(DATE(gt.cal_day), Week(SUNDAY)), 
+    DATE_TRUNC(DATE(gt.cal_day), MONTH),
     gt.user_id
 ) gt_raw
 ),
@@ -50,6 +53,7 @@ GROUP BY
 growth_weekly as (
 SELECT 
     gt.user_id,
+    gt.cal_month,
     gt.cal_week,
     gt.trns_week,
     gt.trns_prev_week,
@@ -108,6 +112,7 @@ FROM gt_raw_movement gt
 final as (
 SELECT 
   l.cal_week,
+  l.cal_month,  
   l.trns_type,
   l.trns_sub_type,
   COUNT(DISTINCT l.active) active,
@@ -124,6 +129,7 @@ SELECT
 FROM growth_weekly l 
 GROUP BY 
   l.cal_week,
+  l.cal_month,    
   l.trns_type,
   l.trns_sub_type
 )
@@ -131,6 +137,7 @@ GROUP BY
 SELECT *
 FROM(
 SELECT
+  cal_month,
   cal_week,
   trns_type,
   trns_sub_type,
@@ -152,6 +159,7 @@ UNPIVOT (
   )
 )
 ORDER BY
+  cal_month,
   cal_week,
   user_type,
   trns_type,

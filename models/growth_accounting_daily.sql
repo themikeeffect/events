@@ -9,6 +9,7 @@ WITH growth_daily as (
 SELECT 
     gt.user_id,
     gt.cal_day,
+    DATE_TRUNC(DATE(gt.cal_day), MONTH) cal_month, 
     gt.trns_day,
     gt.prev_day,
     -- User Classification
@@ -65,6 +66,7 @@ FROM {{ ref('growth_transactions') }} gt
 final as (
 SELECT 
   l.cal_day,
+  l.cal_month,
   l.trns_type,
   l.trns_sub_type,
   COUNT(DISTINCT l.active) active,
@@ -80,6 +82,7 @@ SELECT
   sum(l.miles_redeemed) miles_redeemed
 FROM growth_daily l 
 GROUP BY 
+  l.cal_month
   l.cal_day,
   l.trns_type,
   l.trns_sub_type
@@ -89,6 +92,7 @@ SELECT *
 FROM(
 SELECT
   cal_day,
+  cal_month,
   trns_type,
   trns_sub_type,
   CASE 
@@ -110,6 +114,7 @@ UNPIVOT (
 )
 ORDER BY
   cal_day,
+  cal_month,
   user_type,
   trns_type,
   trns_sub_type
