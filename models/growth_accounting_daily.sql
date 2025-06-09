@@ -82,7 +82,7 @@ SELECT
   sum(l.miles_redeemed) miles_redeemed
 FROM growth_daily l 
 GROUP BY 
-  l.cal_month
+  l.cal_month,
   l.cal_day,
   l.trns_type,
   l.trns_sub_type
