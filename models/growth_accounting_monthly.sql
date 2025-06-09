@@ -10,12 +10,15 @@ WITH gt_raw_movement as (
 SELECT 
    gt_raw.cal_month,
     gt_raw.user_id,
-    gt_raw.no_trns_wk,    
-    CASE WHEN gt_raw.no_trns_wk > 0 then LAG(gt_raw.cal_month) OVER (PARTITION BY gt_raw.user_id ORDER BY cal_month) END trns_prev_month,
-    CASE WHEN gt_raw.no_trns_wk > 0 then gt_raw.cal_month END trns_month,
-    gt_raw.first_trns_wk,
-    gt_raw.last_trns_wk,
-    gt_raw.is_new_user,
+    gt_raw.no_trns_mnth,    
+    CASE WHEN gt_raw.no_trns_mnth > 0 then LAG(gt_raw.cal_month) OVER (PARTITION BY gt_raw.user_id ORDER BY cal_month) END trns_prev_month,
+    CASE WHEN gt_raw.no_trns_mnth > 0 then gt_raw.cal_month END trns_month,
+    gt_raw.first_trns_mnth,
+    gt_raw.last_trns_mnth,
+    CASE WHEN DATE_TRUNC(DATE(dim_user.first_event_time), MONTH) = gt_raw.cal_month
+        THEN 1 
+        ELSE 0
+    END is_new_user,
     gt_raw.trns_activity,
     gt_raw.activity,
     gt_raw.trns,
@@ -28,12 +31,9 @@ SELECT
     SUM(
         CASE WHEN gt.trns_day is not null THEN 1
         ELSE 0
-    END) no_trns_wk,
-    MIN(gt.trns_day) first_trns_wk,
-    MAX(gt.trns_day) last_trns_wk,
-    SUM(CASE WHEN gt.is_new_user = TRUE THEN 1
-        ELSE 0
-    END) is_new_user,
+    END) no_trns_mnth,
+    MIN(gt.trns_day) first_trns_mnth,
+    MAX(gt.trns_day) last_trns_mnth,
     sum(gt.trns_activity) trns_activity,
     sum(gt.activity) activity,
     sum(gt.trns) trns,
@@ -44,6 +44,8 @@ GROUP BY
     DATE_TRUNC(DATE(gt.cal_day), MONTH), 
     gt.user_id
 ) gt_raw
+LEFT JOIN {{ ref('dim_users') }} dim_user
+ON dim_user.user_id = gt_raw.user_id
 ),
 
 -- CTE: getting all statuses
@@ -53,7 +55,7 @@ SELECT
     gt.cal_month,
     gt.trns_month,
     gt.trns_prev_month,
-    gt.no_trns_wk,    
+    gt.no_trns_mnth,    
  -- User Classification
     CASE 
         WHEN gt.is_new_user = 1 then gt.user_id
