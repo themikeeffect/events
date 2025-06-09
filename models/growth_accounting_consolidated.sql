@@ -1,202 +1,130 @@
--- DAU --
-WITH all_events_day AS (
-  SELECT
-    user_id,
-    DATE_TRUNC(DATE(event_time), DAY) AS day,
-    MIN(event_time) OVER (PARTITION BY user_id) AS first_seen
-   FROM {{ source('Events', 'event_stream') }}
-  GROUP BY user_id, event_time
-),
+{{
+  config(
+    materialized='table'
+  )
+}}
 
-user_activity_day AS (
-  SELECT DISTINCT user_id, day FROM all_events_day
-),
-
-activity_lagged_day AS (
-  SELECT
-    user_id,
-    day,
-    LAG(day) OVER (PARTITION BY user_id ORDER BY day) AS prev_day
-  FROM user_activity_day
-),
-
-current_period_day AS (
-  SELECT
-    a.user_id,
-    a.day,
+-- CTE: getting all statuses
+WITH growth_daily as (
+SELECT 
+    gt.user_id,
+    gt.cal_day,
+    gt.trns_day,
+    gt.prev_day,
+    -- User Classification
+    CASE 
+        WHEN gt.is_new_user is TRUE then gt.user_id
+    END new_user,
+    CASE 
+        when gt.cal_day = trns_day then gt.user_id
+    END active,
+    CASE 
+        WHEN gt.is_new_user is TRUE then NULL
+        WHEN gt.cal_day = gt.trns_day and gt.prev_day is null then NULL
+        WHEN gt.cal_day = gt.trns_day and gt.prev_day is not null then gt.user_id
+        ELSE NULL
+    END retained,
+    CASE 
+        WHEN gt.is_new_user is TRUE then NULL
+        WHEN gt.cal_day = gt.trns_day and gt.prev_day is null then gt.user_id
+        ELSE NULL
+    END resurrected,
+    CASE 
+        WHEN gt.is_new_user is TRUE then NULL
+        WHEN gt.trns_day is null and gt.prev_day is not null then gt.user_id
+        ELSE NULL
+    END churned,
+    -- Transaction Type Indicator
     CASE
-  WHEN a.day = DATE_TRUNC(DATE(fs.first_seen), DAY) THEN 'new'
-  WHEN a.prev_day = DATE_SUB(a.day, INTERVAL 1 DAY) THEN 'retained'
-  ELSE 'resurrected'
-    END AS status
-  FROM activity_lagged_day a
-  LEFT JOIN (
-    SELECT user_id, MIN(event_time) AS first_seen
-     FROM {{ source('Events', 'event_stream') }}
-    GROUP BY user_id
-  ) fs ON a.user_id = fs.user_id
-),
-
-churned_users_day AS (
-  SELECT
-    prev.user_id,
-    prev.day,
-    'churned' AS status
-  FROM user_activity_day prev
-  LEFT JOIN user_activity_day next
-    ON prev.user_id = next.user_id
-   AND next.day = DATE_ADD(prev.day, INTERVAL 1 DAY)
-  WHERE next.user_id IS NULL
-),
---- WAU ----
-all_events_week AS (
-  SELECT
-    user_id,
-    DATE_TRUNC(DATE(event_time), WEEK(MONDAY)) AS week,
-    MIN(event_time) OVER (PARTITION BY user_id) AS first_seen
-   FROM {{ source('Events', 'event_stream') }}
-  GROUP BY user_id, event_time
-),
-
-user_activity_week AS (
-  SELECT DISTINCT user_id, week FROM all_events_week
-),
-
-activity_lagged_week AS (
-  SELECT
-    user_id,
-    week,
-    LAG(week) OVER (PARTITION BY user_id ORDER BY week) AS prev_week
-  FROM user_activity_week
-),
-
-current_period_week AS (
-  SELECT
-    a.user_id,
-    a.week,
+        WHEN gt.activity > 0 AND gt.trns = 0 THEN 'Engagement'
+        WHEN gt.activity = 0 AND gt.trns > 0 THEN 'Miles'
+        WHEN gt.activity > 0 AND gt.trns > 0 THEN 'Miles & Engagement'
+        WHEN gt.trns_day is null and gt.prev_day is not null then 'Churned'
+        ELSE 'No Activity'
+    END trns_type,    
+    -- Transaction Sub Type Indicator
     CASE
-      WHEN a.week = DATE_TRUNC(DATE(fs.first_seen), WEEK(MONDAY)) THEN 'new'
-      WHEN a.prev_week IS NOT NULL THEN 'retained'
-      ELSE 'resurrected'
-    END AS status
-  FROM activity_lagged_week a
-  LEFT JOIN (
-    SELECT user_id, MIN(event_time) AS first_seen
-     FROM {{ source('Events', 'event_stream') }}
-    GROUP BY user_id
-  ) fs ON a.user_id = fs.user_id
+        WHEN gt.activity > 0 AND gt.trns = 0 THEN 'Engagement'
+        WHEN gt.activity = 0 AND gt.trns > 0 AND miles_redeemed <> 0 AND miles_redeemed <> 0 THEN 'Miles Earned & Redeemed'
+        WHEN gt.activity = 0 AND gt.trns > 0 AND miles_earned = 0 THEN 'Miles Redemption Only'
+        WHEN gt.activity = 0 AND gt.trns > 0 AND miles_redeemed = 0 THEN 'Miles Earned Only'
+        WHEN gt.activity > 0 AND gt.trns > 0 AND miles_redeemed <> 0 AND miles_redeemed <> 0 THEN 'Engagement & Earn & Redeem'
+        WHEN gt.activity > 0 AND gt.trns > 0 AND miles_earned = 0 THEN 'Engagement & Miles Redemption'
+        WHEN gt.activity > 0 AND gt.trns > 0 AND miles_redeemed = 0 THEN 'Engagement & Miles Earned'
+        WHEN gt.trns_day is null and gt.prev_day is not null then 'Churned'
+    ELSE 'No Activity'
+    END trns_sub_type,    
+    gt.trns_activity,
+    gt.activity,
+    gt.trns,
+    gt.miles_earned,
+    gt.miles_redeemed    
+FROM {{ ref('growth_transactions') }} gt
 ),
 
-churned_users_week AS (
-  SELECT
-    prev.user_id,
-    prev.week,
-    'churned' AS status
-  FROM user_activity_week prev
-  LEFT JOIN user_activity_week next
-    ON prev.user_id = next.user_id
-   AND next.week = DATE_ADD(prev.week, INTERVAL 1 WEEK)
-  WHERE next.user_id IS NULL
-),
-
---- DAU ----
-all_events_month AS (
-  SELECT
-    user_id,
-    DATE_TRUNC(DATE(event_time), MONTH) AS month,
-    MIN(event_time) OVER (PARTITION BY user_id) AS first_seen
-   FROM {{ source('Events', 'event_stream') }}
-  GROUP BY user_id, event_time
-),
-
-user_activity_month AS (
-  SELECT DISTINCT user_id, month FROM all_events_month
-),
-
-activity_lagged_month AS (
-  SELECT
-    user_id,
-    month,
-    LAG(month) OVER (PARTITION BY user_id ORDER BY month) AS prev_month
-  FROM user_activity_month
-),
-
-current_period_month AS (
-  SELECT
-    a.user_id,
-    a.month,
-    CASE
-      WHEN a.month = DATE_TRUNC(DATE(fs.first_seen), MONTH) THEN 'new'
-      WHEN a.prev_month IS NOT NULL THEN 'retained'
-      ELSE 'resurrected'
-    END AS status
-  FROM activity_lagged_month a
-  LEFT JOIN (
-    SELECT user_id, MIN(event_time) AS first_seen
-     FROM {{ source('Events', 'event_stream') }}
-    GROUP BY user_id
-  ) fs ON a.user_id = fs.user_id
-),
-
-churned_users_month AS (
-  SELECT
-    prev.user_id,
-    prev.month,
-    'churned' AS status
-  FROM user_activity_month prev
-  LEFT JOIN user_activity_month next
-    ON prev.user_id = next.user_id
-   AND next.month = DATE_ADD(prev.month, INTERVAL 1 MONTH)
-  WHERE next.user_id IS NULL
-),
---- Main Joining Query ---
-main AS (
-SELECT
-  'Day' as metric,
-  DATE_TRUNC(DATE(day), MONTH) AS month,
-  day as period,
-  status,
-  COUNT(DISTINCT user_id) AS users
-FROM (
-  SELECT * FROM current_period_day
-  UNION ALL
-  SELECT * FROM churned_users_day
-)
-GROUP BY day, status
-
-UNION ALL
-
-SELECT
-  'Week' as metric,
-  DATE_TRUNC(DATE(week), MONTH) AS month,
-  week as period,
-  status,
-  COUNT(DISTINCT user_id) AS users
-FROM (
-  SELECT * FROM current_period_week
-  UNION ALL
-  SELECT * FROM churned_users_week
-)
-GROUP BY week, status
-
-UNION ALL
-
-SELECT
-  'Month' as metric,
-  month,
-  month as period,
-  status,
-  COUNT(DISTINCT user_id) AS users
-FROM (
-  SELECT * FROM current_period_month
-  UNION ALL
-  SELECT * FROM churned_users_month
-)
-GROUP BY month, status
+final as (
+SELECT 
+  l.cal_day,
+  l.trns_type,
+  l.trns_sub_type,
+  COUNT(DISTINCT l.active) active,
+  COUNT(DISTINCT l.new_user) new_users,  
+  COUNT(DISTINCT l.retained) retained,  
+  COUNT(DISTINCT l.resurrected) resurrected, 
+  COUNT(DISTINCT l.churned) pos_churned,
+  COUNT(DISTINCT l.churned)*-1 neg_churned,
+  sum(l.trns_activity) trns_activity,
+  sum(l.activity) activity,
+  sum(l.trns) trns,
+  sum(l.miles_earned) miles_earned,
+  sum(l.miles_redeemed) miles_redeemed
+FROM growth_daily l 
+GROUP BY 
+  l.cal_day,
+  l.trns_type,
+  l.trns_sub_type
 )
 
 SELECT *
-FROM main
+FROM(
+SELECT
+  cal_day,
+  DATE_TRUNC(DATE(cal_day), WEEK(SUNDAY)) cal_week, 
+  DATE_TRUNC(DATE(cal_day), MONTH) cal_month,
+  trns_type,
+  trns_sub_type,
+  CASE 
+    WHEN user_type = 'tot_churned' THEN 'TOTAL'
+    ELSE 'BREAKDOWN' 
+  END type,
+  user_type,
+  user_cnt
+FROM final 
+UNPIVOT (
+  user_cnt  FOR user_type IN (
+    new_users   AS 'new_users',
+    retained    AS 'retained',
+    resurrected AS 'resurrected',
+    pos_churned as 'tot_churned',
+    neg_churned as 'churned',
+    active as 'active'
+  )
+)
+ORDER BY
+  cal_day,
+  DATE_TRUNC(DATE(cal_day), MONTH),
+  DATE_TRUNC(DATE(cal_day), WEEK(SUNDAY)),
+  user_type,
+  trns_type,
+  trns_sub_type,
+  CASE 
+    WHEN user_type = 'tot_churned' THEN 'TOTAL'
+    ELSE 'BREAKDOWN' 
+  END 
+) a 
 
-
-
+WHERE 
+    ( 
+       (trns_type <> 'Churned' AND NOT user_type IN ('churned','tot_churned'))
+    OR ( trns_type = 'Churned' AND user_type IN ('churned','tot_churned') )
+    )

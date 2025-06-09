@@ -1,11 +1,3 @@
-{{
-  config(
-    materialized='incremental',
-    unique_key = 'day',
-    incremental_strategy = 'merge'
-  )
-}}
-
 SELECT day
 FROM UNNEST(
   GENERATE_DATE_ARRAY(

@@ -97,7 +97,7 @@ range_raw as (
   FROM with_calendar_days h
 ),
 
--- End Table: Classificaiton of New Flag, transaction type, and identifying all activities
+-- End Table: Classificaiton of New Flag
 final as (
     SELECT 
     grw.user_id,
@@ -108,25 +108,7 @@ final as (
     CASE 
         WHEN grw.cal_day = grw.trns_day THEN TRUE
         ELSE FALSE
-    END is_new_user,
-    -- Transaction Type Indicator
-    CASE
-      WHEN p_ua.activity > 0 AND p_ua.trns = 0 THEN 'Engagement'
-      WHEN p_ua.activity = 0 AND p_ua.trns > 0 THEN 'Miles'
-      WHEN p_ua.activity > 0 AND p_ua.trns > 0 THEN 'Miles/Engagement'
-      ELSE 'No Activity'
-    END trns_type,    
-    -- Transaction Sub Type Indicator
-    CASE
-      WHEN p_ua.activity > 0 AND p_ua.trns = 0 THEN 'Engagement Only'
-      WHEN p_ua.activity = 0 AND p_ua.trns > 0 AND miles_redeemed <> 0 AND miles_redeemed <> 0 THEN 'Miles Earned & Redeemed'
-      WHEN p_ua.activity = 0 AND p_ua.trns > 0 AND miles_earned = 0 THEN 'Miles Redemption Only'
-      WHEN p_ua.activity = 0 AND p_ua.trns > 0 AND miles_redeemed = 0 THEN 'Miles Earned Only'
-      WHEN p_ua.activity > 0 AND p_ua.trns > 0 AND miles_redeemed <> 0 AND miles_redeemed <> 0 THEN 'Engagement & Earn & Redeem'
-      WHEN p_ua.activity > 0 AND p_ua.trns > 0 AND miles_earned = 0 THEN 'Engagement & Miles Redemption'
-      WHEN p_ua.activity > 0 AND p_ua.trns > 0 AND miles_redeemed = 0 THEN 'Engagement & Miles Earned'
-      ELSE 'No Activity'
-    END trns_sub_type,       
+    END is_new_user,   
     p_ua.trns_activity,
     p_ua.activity,
     p_ua.trns,

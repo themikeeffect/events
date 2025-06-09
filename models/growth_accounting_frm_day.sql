@@ -4,34 +4,35 @@
   )
 }}
 
--- CTE: getting all statuses
-WITH growth_daily as (
+-- FINAL: getting all statuses
 SELECT 
     gt.user_id,
+    DATE_TRUNC(DATE(gt.cal_day), WEEK(SUNDAY)) cal_week, 
+    DATE_TRUNC(DATE(gt.cal_day), MONTH) cal_month,
     gt.cal_day,
     gt.trns_day,
     gt.prev_day,
     -- User Classification
     CASE 
-        WHEN gt.is_new_user is TRUE then gt.user_id
+        WHEN gt.is_new_user is TRUE then 1
     END new_user,
     CASE 
-        when gt.cal_day = trns_day then gt.user_id
+        when gt.cal_day = trns_day then 1
     END active,
     CASE 
         WHEN gt.is_new_user is TRUE then NULL
         WHEN gt.cal_day = gt.trns_day and gt.prev_day is null then NULL
-        WHEN gt.cal_day = gt.trns_day and gt.prev_day is not null then gt.user_id
+        WHEN gt.cal_day = gt.trns_day and gt.prev_day is not null then 1
         ELSE NULL
     END retained,
     CASE 
         WHEN gt.is_new_user is TRUE then NULL
-        WHEN gt.cal_day = gt.trns_day and gt.prev_day is null then gt.user_id
+        WHEN gt.cal_day = gt.trns_day and gt.prev_day is null then 1
         ELSE NULL
     END resurrected,
     CASE 
         WHEN gt.is_new_user is TRUE then NULL
-        WHEN gt.trns_day is null and gt.prev_day is not null then gt.user_id
+        WHEN gt.trns_day is null and gt.prev_day is not null then 1
         ELSE NULL
     END churned,
     -- Transaction Type Indicator
@@ -60,63 +61,5 @@ SELECT
     gt.miles_earned,
     gt.miles_redeemed    
 FROM {{ ref('growth_transactions') }} gt
-),
 
-final as (
-SELECT 
-  l.cal_day,
-  l.trns_type,
-  l.trns_sub_type,
-  COUNT(DISTINCT l.active) active,
-  COUNT(DISTINCT l.new_user) new_users,  
-  COUNT(DISTINCT l.retained) retained,  
-  COUNT(DISTINCT l.resurrected) resurrected, 
-  COUNT(DISTINCT l.churned) pos_churned,
-  COUNT(DISTINCT l.churned)*-1 neg_churned,
-  sum(l.trns_activity) trns_activity,
-  sum(l.activity) activity,
-  sum(l.trns) trns,
-  sum(l.miles_earned) miles_earned,
-  sum(l.miles_redeemed) miles_redeemed
-FROM growth_daily l 
-GROUP BY 
-  l.cal_day,
-  l.trns_type,
-  l.trns_sub_type
-)
 
-SELECT *
-FROM(
-SELECT
-  cal_day,
-  trns_type,
-  trns_sub_type,
-  CASE 
-    WHEN user_type = 'tot_churned' THEN 'TOTAL'
-    ELSE 'BREAKDOWN' 
-  END type,
-  user_type,
-  user_cnt
-FROM final 
-UNPIVOT (
-  user_cnt  FOR user_type IN (
-    new_users   AS 'new_users',
-    retained    AS 'retained',
-    resurrected AS 'resurrected',
-    pos_churned as 'tot_churned',
-    neg_churned as 'churned',
-    active as 'active'
-  )
-)
-ORDER BY
-  cal_day,
-  user_type,
-  trns_type,
-  trns_sub_type
-) a 
-
-WHERE 
-    ( 
-       (trns_type <> 'Churned' AND NOT user_type IN ('churned','tot_churned'))
-    OR ( trns_type = 'Churned' AND user_type IN ('churned','tot_churned') )
-    )

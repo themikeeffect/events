@@ -1,11 +1,3 @@
-{{
-  config(
-    materialized='incremental',
-    unique_key = 'user_id',
-    incremental_strategy = 'merge'
-  )
-}}
-
 WITH first_event_time AS (
   SELECT
     user_id,
