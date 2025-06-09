@@ -1,4 +1,10 @@
-{{ config(materialized='table') }}
+{{
+  config(
+    materialized='incremental',
+    unique_key = 'day',
+    incremental_strategy = 'merge'
+  )
+}}
 
 SELECT day
 FROM UNNEST(
