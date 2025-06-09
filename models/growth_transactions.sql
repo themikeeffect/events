@@ -1,6 +1,6 @@
 {{
   config(
-    materialized='view'
+    materialized='table'
   )
 }}
 
@@ -65,19 +65,37 @@ logged_data AS (
 
 --CTE: joining calendar days to user span and adding previous transaction days
 with_calendar_days as (
-  SELECT
-    p_ld.user_id,
-    cal.day       AS cal_day,
-    ad.day        AS trns_day,
-    LAG(ad.day)  OVER (PARTITION BY p_ld.user_id ORDER BY cal.day) AS prev_day,
-    p_ld.first_seen
-  FROM {{ ref('calendar') }} AS cal
-  JOIN logged_data AS p_ld
-    ON cal.day BETWEEN p_ld.first_seen AND p_ld.last_trns
-  LEFT JOIN all_data AS ad
-    ON ad.user_id = p_ld.user_id
-   AND ad.day    = cal.day
+  SELECT 
+    c.user_id,
+    c.cal_day,
+    c.trns_day,
+    LAG(c.trns_day) OVER (PARTITION BY c.user_id ORDER BY c.cal_day) AS prev_day,
+    MIN(c.first_seen) OVER (PARTITION BY c.user_id) AS first_seen,
+    MAX(c.trns_day) OVER (PARTITION BY c.user_id) AS last_trns
+    FROM(
+    SELECT 
+      f.user_id,
+      f.cal_day,
+      g.day trns_day,
+      g.first_seen
+    FROM (
+      SELECT DISTINCT
+        e.user_id,
+        d.day cal_day
+      FROM {{ ref('calendar') }} AS d
+      LEFT JOIN logged_data e
+      ON d.day >= e.day
+    ) f
+    LEFT JOIN logged_data g
+    ON f.user_id = g.user_id
+    AND f.cal_day = g.day
+  ) c 
 ), 
+
+range_raw as (
+  SELECT DISTINCT h.user_id, h.first_seen, h.last_trns
+  FROM with_calendar_days h
+),
 
 -- End Table: Classificaiton of New Flag, transaction type, and identifying all activities
 final as (
@@ -115,6 +133,9 @@ final as (
     p_ua.miles_earned,
     p_ua.miles_redeemed
   FROM with_calendar_days grw
+  INNER JOIN range_raw j
+  ON grw.user_id = j.user_id
+  AND grw.cal_day between j.first_seen and j.last_trns
   LEFT JOIN user_activity p_ua
   ON grw.user_id = p_ua.user_id
   AND grw.cal_day = p_ua.day
