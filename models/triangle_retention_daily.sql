@@ -28,10 +28,11 @@ cohort_activity AS (
 cohort_counts AS (
   SELECT
     cohort_date,
+    event_date,
     DATE_DIFF(event_date, cohort_date, DAY) AS period_offset,
     COUNT(DISTINCT user_id) AS users
   FROM cohort_activity
-  GROUP BY cohort_date, period_offset
+  GROUP BY cohort_date, event_date, period_offset
 ),
 --CTE: Getting the Cohort Size
 cohort_size AS (
@@ -44,7 +45,8 @@ cohort_size AS (
 
 --Final: Creating the cohort daily tally
 SELECT
-  DATE_TRUNC(DATE(cc.cohort_date), month) cal_month,
+  DATE_TRUNC(DATE(cc.event_date), month) cal_month,
+  DATE_TRUNC(DATE(cc.cohort_date), month) cohort_ref_month,
   cc.cohort_date,
   cc.period_offset,
   cc.users,

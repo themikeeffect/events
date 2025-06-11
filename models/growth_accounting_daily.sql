@@ -63,7 +63,8 @@ SELECT
 FROM {{ ref('growth_transactions') }} gt
 ),
 
-final as (
+-- CTE: Consolidation of Tables 
+consolidate_table as (
 SELECT 
   l.cal_day,
   l.cal_month,
@@ -86,10 +87,11 @@ GROUP BY
   l.cal_day,
   l.trns_type,
   l.trns_sub_type
-)
+),
 
+breakdown_user_cnt as (
 SELECT *
-FROM(
+FROM (
 SELECT
   cal_day,
   cal_month,
@@ -101,7 +103,7 @@ SELECT
   END type,
   user_type,
   user_cnt
-FROM final 
+FROM consolidate_table 
 UNPIVOT (
   user_cnt  FOR user_type IN (
     new_users   AS 'new_users',
@@ -125,3 +127,76 @@ WHERE
        (trns_type <> 'Churned' AND NOT user_type IN ('churned','tot_churned'))
     OR ( trns_type = 'Churned' AND user_type IN ('churned','tot_churned') )
     )
+),
+
+breakdown_user_miles as (
+SELECT *
+FROM (
+SELECT
+  cal_day,
+  cal_month,
+  trns_type,
+  trns_sub_type,
+  'TOTAL' type,
+  miles_trns_type,
+  miles_pct
+FROM consolidate_table 
+UNPIVOT (
+  miles_pct  FOR miles_trns_type IN (
+    miles_earned   AS 'miles_earned',
+    miles_redeemed    AS 'miles_redeemed'
+  )
+)
+ORDER BY
+  cal_day,
+  cal_month,
+  miles_trns_type,
+  trns_type,
+  trns_sub_type
+) a 
+
+WHERE 
+   NOT (trns_type In ('Churned','No Activity')
+)
+)
+
+-- final: Main table
+SELECT 
+    cal_day,
+    cal_month,
+    trns_type,
+    trns_sub_type,
+    type,
+    user_type,
+    sum(user_cnt) user_cnt,
+    sum(miles_pct) miles_pct
+FROM (
+SELECT 
+    cal_day,
+    cal_month,
+    trns_type,
+    trns_sub_type,
+    type,
+    user_type,
+    user_cnt,
+    0 miles_pct
+FROM breakdown_user_cnt
+
+UNION ALL 
+SELECT 
+    cal_day,
+    cal_month,
+    trns_type,
+    trns_sub_type,
+    type,
+    miles_trns_type,
+    0 user_cnt,
+    miles_pct
+FROM breakdown_user_miles
+) 
+GROUP BY    cal_day,
+    cal_month,
+    trns_type,
+    trns_sub_type,
+    type,
+    user_type
