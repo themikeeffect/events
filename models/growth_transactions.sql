@@ -104,11 +104,10 @@ final as (
     grw.cal_day,
     grw.trns_day,
     grw.prev_day,
-    -- New User Indicator
-    CASE WHEN DATE_TRUNC(DATE(dim_user.first_event_time), DAY) = grw.cal_day
-        THEN TRUE
+    CASE WHEN grw.cal_day = grw.first_seen THEN TRUE
         ELSE FALSE
-    END is_new_user,    
+    END is_new_user,
+    grw.first_seen, 
     p_ua.trns_activity,
     p_ua.activity,
     p_ua.trns,
@@ -121,9 +120,7 @@ final as (
   LEFT JOIN user_activity p_ua
   ON grw.user_id = p_ua.user_id
   AND grw.cal_day = p_ua.day
-  LEFT JOIN {{ ref('dim_users') }} dim_user
-  ON dim_user.user_id = grw.user_id
-    
+
 )
 
 SELECT *

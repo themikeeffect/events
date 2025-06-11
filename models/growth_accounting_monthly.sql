@@ -15,10 +15,7 @@ SELECT
     CASE WHEN gt_raw.no_trns_mnth > 0 then gt_raw.cal_month END trns_month,
     gt_raw.first_trns_mnth,
     gt_raw.last_trns_mnth,
-    CASE WHEN DATE_TRUNC(DATE(dim_user.first_event_time), MONTH) = gt_raw.cal_month
-        THEN 1 
-        ELSE 0
-    END is_new_user,
+    gt_raw.is_new_user,
     gt_raw.trns_activity,
     gt_raw.activity,
     gt_raw.trns,
@@ -32,6 +29,10 @@ SELECT
         CASE WHEN gt.trns_day is not null THEN 1
         ELSE 0
     END) no_trns_mnth,
+    SUM(
+        CASE WHEN gt.is_new_user is TRUE THEN 1
+        ELSE 0
+    END) is_new_user,       
     MIN(gt.trns_day) first_trns_mnth,
     MAX(gt.trns_day) last_trns_mnth,
     sum(gt.trns_activity) trns_activity,
@@ -44,8 +45,6 @@ GROUP BY
     DATE_TRUNC(DATE(gt.cal_day), MONTH), 
     gt.user_id
 ) gt_raw
-LEFT JOIN {{ ref('dim_users') }} dim_user
-ON dim_user.user_id = gt_raw.user_id
 ),
 
 -- CTE: getting all statuses
