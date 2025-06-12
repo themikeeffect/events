@@ -52,7 +52,7 @@ The following are the contents of the dashboard:
 - **Transaction Breakdown**: Miles vs Engagement vs Mixed
 
 ## Dashboard screenshot is here: https://github.com/themikeeffect/events/tree/event_analytics/snapshots
-## Live Dashboard is here: https://lookerstudio.google.com/u/0/reporting/36fa1101-ad0a-465f-9cb5-eefba3059b36/
+## Live Dashboard is here: https://lookerstudio.google.com/reporting/36fa1101-ad0a-465f-9cb5-eefba3059b36
 
 📣 Contributors
 	•	Michael Minorca — Design, modeling, analytics 
